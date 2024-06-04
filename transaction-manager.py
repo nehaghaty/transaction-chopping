@@ -9,19 +9,41 @@ condition = threading.Condition()
 should_stop = False
 
 # queue thread
-def queueThread(queueObj):
+def queueThread(queueObj, done_list):
     message_queue = queueObj.message_queue
     response_queue = queueObj.response_queue
     hopsqueue = queueObj.queue
 
-    for i in range(len(hopsqueue)):
-        message_queue.put(hopsqueue.peek())
+    while not hopsqueue.is_empty():
+        hop = hopsqueue.peek()
+        if hop.transaction_tag == "T7":
+            if not all(done_list.contains(t) for t in ["T2", "T3", "T4", "T6"]):
+                print("Waiting for dependencies to complete for T7...", done_list)
+                time.sleep(5)
+                continue
+        
+        request = Request(hop)
+        message_queue.put(request)
         with condition:
             condition.notify_all()
 
         response = response_queue.get()
-        print("Thread 1: Received Response from Thread 2", response)
-        hopsqueue.dequeue()
+        print(f"Queue {queueObj.queueNumber}: Received Response from Node {queueObj.queueNumber}", response.status, " ", response.body)
+
+        if response.status == "abort":
+            queue.remove_all(hop.transaction_tag)
+            print(f"Transaction {hop.transaction_tag} aborted. Removed all its hops from the queue.")
+        else:
+            if hop.operation_type == "read":
+                print(f"Read value: {response.body}")
+            hopsqueue.dequeue()
+
+        if hop.is_last:
+            done_list.add(hop.transaction_tag)
+            print(f"Transaction {hop.transaction_tag} completed and added to done list.")            
+        
+    # print(f"Processed hop {hop}")
+
 
 # node thread
 def nodeThread(node):
@@ -30,18 +52,23 @@ def nodeThread(node):
                                          
     while not should_stop:
         if not message_queue.empty():
-            message = message_queue.get()
-            print("Thread 2: Received message from Thread 1:", message)
-            if (message.operation_type == "write"):
-                write_row(message, node.csvFile)
-            elif (message.operation_type == "update"):
-                update_row(message, node.csvFile)
-            else:
-                read_row(message, node.csvFile)
+            request = message_queue.get()
+            hop = request.hop
+            print(f"Node {node.nodeNumber}: Received message from Queue {node.nodeNumber}", hop)
 
+            status = "commit"
+            body = ""
+            if (hop.operation_type == "write"):
+                write_row(hop, node.csvFile)
+            elif (hop.operation_type == "update"):
+                update_row(hop, node.csvFile)
+            else:
+                read_row(hop, node.csvFile)
+                body = hop.data
+
+            response = Response(status, body)
             time.sleep(2)
-            response = f"Processed: {message}"
-            print("Thread 2: Sending response to Thread 1")
+            print(f"Node {node.nodeNumber}: Sending response to Queue {node.nodeNumber}", hop)
             response_queue.put(response)
         else:
             with condition:
@@ -86,9 +113,11 @@ def read_row(hop, filename):
 def main():
     global should_stop
 
-    node1 = Node(0)
-    queue1 = Queue(0)
-    hopsqueue1 = queue1.queue
+    done_list = DoneList()
+    hopsqueue1 = allQueues[0].queue
+    hopsqueue2 = allQueues[1].queue
+    hopsqueue3 = allQueues[2].queue
+
     create_empty_csv_files(numberOfPartitions)
 
     hop1 = Hops(transaction_tag="T1", is_last=False, operation_type="write",
@@ -106,69 +135,41 @@ def main():
     hopsqueue1.enqueue(hop1)
     hopsqueue1.enqueue(hop2)
     hopsqueue1.enqueue(hop3)
+
+    hopsqueue2.enqueue(hop1)
+    hopsqueue2.enqueue(hop2)
+    hopsqueue2.enqueue(hop3)
+
+    hopsqueue3.enqueue(hop1)
+    hopsqueue3.enqueue(hop2)
+    hopsqueue3.enqueue(hop3)
+
     
     for i in range(numberOfPartitions):
-        t1 = threading.Thread(target=queueThread, args=(queue1, ))
-        t2 = threading.Thread(target=nodeThread, args=(node1, ))
+        t1 = threading.Thread(target=queueThread, args=(allQueues[i], done_list))
+        t2 = threading.Thread(target=nodeThread, args=(allNodes[i], ))
 
         t1.start()
         t2.start()
 
-        globalQueuesThreads.append(t1)
-        globalNodesThreads.append(t2)
+        allQueues[i].threadID = t1;
+        allNodes[i].threadID = t2;
 
-    for t in globalQueuesThreads:
-        t.join()
+    for q in allQueues:
+        q.threadID.join()
 
     should_stop = True
     with condition:
         condition.notify_all()
 
-    for t in globalNodesThreads:
-        t.join()
+    for n in allNodes:
+        n.threadID.join()
 
 if __name__ == "__main__":
     main()
 
 
 
-
-
-
-
-
-# def send_to_node(hop):
-#     # Simulate sending hop to a node and getting a response
-#     print(f"Sending hop {hop} to node")
-#     time.sleep(random.uniform(0.1, 0.5))  # Simulate network delay
-#     # Simulate random success or abort response
-#     response = "commit"
-#     read_value = hop.data if hop.operation_type == "read" else None
-#     return response, read_value
-
-# def process_queue(queue, done_list):
-#     while not queue.is_empty():
-#         hop = queue.peek()
-#         if hop.transaction_tag == "T7":
-#             if not all(done_list.contains(t) for t in ["T2", "T3", "T4", "T6"]):
-#                 print("Waiting for dependencies to complete for T7...", done_list)
-#                 time.sleep(5)
-#                 continue
-
-#         response, read_value = send_to_node(hop)
-#         if response == "abort":
-#             queue.remove_all(hop.transaction_tag)
-#             print(f"Transaction {hop.transaction_tag} aborted. Removed all its hops from the queue.")
-#         else:
-#             if hop.operation_type == "read":
-#                 print(f"Read value: {read_value}")
-#             queue.dequeue()
-#             if hop.is_last:
-#                 done_list.add(hop.transaction_tag)
-#                 print(f"Transaction {hop.transaction_tag} completed and added to done list.")
-#             print(f"Processed hop {hop}")
-
-#     print(f"{threading.current_thread().name} done")
 
 # def main():
 #     queue1 = HopsQueue()
