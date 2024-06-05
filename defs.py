@@ -61,6 +61,7 @@ class DoneList:
         return f"DoneList({self.done_list})"
 
 class Node: 
+    threadID = None
     def __init__(self, nodeNumber):
         self.nodeNumber = nodeNumber
         self.csvFile = str(nodeNumber) + ".csv"
@@ -77,16 +78,17 @@ class Response:
         self.body = body
 
 class Queue:
+    threadID = None
     def __init__(self, queueNumber) -> None:
         self.queue = globalQueuesList[queueNumber]
         self.queueNumber = queueNumber
         self.message_queue = globalMessageQueue[queueNumber]
         self.response_queue = globalResponseQueue[queueNumber]
 
-numberOfPartitions = 1
+numberOfPartitions = 3
 
 globalMessageQueue = [queue.Queue() for _ in range(numberOfPartitions)]
 globalResponseQueue = [queue.Queue() for _ in range(numberOfPartitions)]
 globalQueuesList = [HopsQueue() for _ in range(numberOfPartitions)]
-globalQueuesThreads = []
-globalNodesThreads = []
+allQueues = [Queue(i) for i in range(numberOfPartitions)]
+allNodes = [Node(i) for i in range(numberOfPartitions)]
