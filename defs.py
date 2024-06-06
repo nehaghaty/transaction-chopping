@@ -2,20 +2,14 @@ import queue
 from collections import deque
 
 class Hops:
-    def __init__(self, transaction_tag, is_last, operation_type, table_name, primary_key_name, primary_key_value, data):
+    def __init__(self, transaction_tag, is_last, operations):
         self.transaction_tag = transaction_tag
         self.is_last = is_last
-        self.operation_type = operation_type  # 'read' or 'write'
-        self.table_name = table_name
-        self.primary_key_name = primary_key_name
-        self.primary_key_value = primary_key_value
-        self.data = data
+        self.operations = operations  # List of operations
 
     def __repr__(self):
         return (f"Hops(transaction_tag={self.transaction_tag}, is_last={self.is_last}, "
-                f"operation_type={self.operation_type}, table_name={self.table_name}, "
-                f"primary_key_name={self.primary_key_name}, primary_key_value={self.primary_key_value}, "
-                f"data={self.data})")
+                f"operations={self.operations})")
 
 class HopsQueue:
     def __init__(self):
@@ -85,7 +79,7 @@ class Queue:
         self.message_queue = globalMessageQueue[queueNumber]
         self.response_queue = globalResponseQueue[queueNumber]
 
-numberOfPartitions = 3
+numberOfPartitions = 4
 
 globalMessageQueue = [queue.Queue() for _ in range(numberOfPartitions)]
 globalResponseQueue = [queue.Queue() for _ in range(numberOfPartitions)]
