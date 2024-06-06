@@ -1,4 +1,4 @@
-from collections import deque
+from termcolor import colored
 import threading
 import time
 import random
@@ -11,6 +11,19 @@ from defs import Hops, HopsQueue, Request, Response, DoneList, globalMessageQueu
 condition = threading.Condition()
 should_stop = False
 transaction_states = {}  # To track the state of each transaction
+
+hop_descriptions = {
+    "T1": "Registered student 1",
+    "T2": "Viewed submissions of a class",
+    "T3_1": "Submitted assignment in Submission table",
+    "T3_2": "Updatd submission count in Assignment table",
+    "T4_1": "Submitted quiz in Submission table",
+    "T4_2": "Update submission count in Quiz table",
+    "T5": "Updated student 1 email",
+    "T6": "Calculated grade of class from Submission table and updated final grades in Student table",
+    "T7_1": "View submission deadlines for Quizzes",
+    "T7_2": "View submission deadlines for Assignments"
+}
 
 def write_row(operations, filename):
     with open(filename, 'a', newline='') as file:
@@ -74,7 +87,16 @@ def process_queue(queueObj, done_list):
 
         response = queueObj.response_queue.get()
         # time.sleep(5)
-        print(f"Queue {queueObj.queueNumber}: Received Response from Node {queueObj.queueNumber}", response.status)
+        print(colored(f"Queue {queueObj.queueNumber}: Received response from Node {queueObj.queueNumber} " + response.status, 'green'))
+
+        if(hop.transaction_tag in ["T1", "T2", "T5", "T6"]):
+            #  print(colored('hello', 'red'), colored('world', 'green'))
+            print( colored("Hop for " + hop.transaction_tag + " DONE ======> " + hop_descriptions.get(hop.transaction_tag), 'red'))
+        else:
+            if(hop.is_last):
+                print( colored("Hop for "+ hop.transaction_tag+"_2" + " DONE ======> " + hop_descriptions.get(hop.transaction_tag+"_2"),'red'))
+            else:
+                print( colored("Hop for " + hop.transaction_tag+"_1" + " DONE ======> " + hop_descriptions.get(hop.transaction_tag+"_1"),'red'))
 
         if response.status == "abort":
             hopsqueue.remove_all(hop.transaction_tag)
@@ -89,7 +111,6 @@ def process_queue(queueObj, done_list):
 
             if hop.is_last:
                 done_list.add(hop.transaction_tag)
-                print(f"Transaction {hop.transaction_tag} completed and added to done list.")
                 # Reset the state of the transaction
                 if hop.transaction_tag in transaction_states:
                     del transaction_states[hop.transaction_tag]
@@ -128,8 +149,14 @@ def nodeThread(node):
         if not message_queue.empty():
             request = message_queue.get()
             hop = request.hop
-            # time.sleep(2)
-            print(f"Node {node.nodeNumber}: Received message from Queue {node.nodeNumber}")
+            time.sleep(2)
+            if(hop.transaction_tag in ["T1", "T2", "T5", "T6"]):
+                print(colored(f"Node {node.nodeNumber}: Received hop " + hop.transaction_tag + f" from queue {node.nodeNumber}", 'blue'))
+            else:
+                if(hop.is_last):
+                    print(colored(f"Node {node.nodeNumber}: Received hop " + hop.transaction_tag+"_2" +  f" from queue {node.nodeNumber}", 'blue'))
+                else:
+                    print(colored(f"Node {node.nodeNumber}: Received hop " + hop.transaction_tag+"_1" +  f" from queue {node.nodeNumber}", 'blue'))
 
             status = "commit"
             body = ""
@@ -145,7 +172,7 @@ def nodeThread(node):
 
             response = Response(status, body)
             # time.sleep(2)
-            print(f"Node {node.nodeNumber}: Sending response to Queue {node.nodeNumber}")
+            # print(f"Node {node.nodeNumber}: Sending response to Queue {node.nodeNumber}")
             response_queue.put(response)
         else:
             with condition:
